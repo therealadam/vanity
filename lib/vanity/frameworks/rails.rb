@@ -189,24 +189,28 @@ end
 
 # Automatically configure Vanity.  Uses the 
 if defined?(Rails)
-  Rails.configuration.after_initialize do
-    # Use Rails logger by default.
-    Vanity.playground.logger ||= Rails.logger
-    Vanity.playground.load_path = Rails.root + Vanity.playground.load_path
-    config_file = Rails.root + "config/redis.yml"
-    if !Vanity.playground.connected? && config_file.exist?
-      config = YAML.load_file(config_file)[Rails.env.to_s]
-      Vanity.playground.redis = config if config
+  
+  class Railtie < Rails::Railtie
+    initializer 'vanity.configure' do
+      # Use Rails logger by default.
+      Vanity.playground.logger ||= Rails.logger
+      Vanity.playground.load_path = Rails.root + Vanity.playground.load_path
     end
-
-    # Do this at the very end of initialization, allowing test environment to do
-    # Vanity.playground.mock! before any database access takes place.
-    Rails.configuration.after_initialize do
+    
+    initializer 'vanity.connect' do
+      config_file = Rails.root + "config/redis.yml"
+      if !Vanity.playground.connected? && config_file.exist?
+        config = YAML.load_file(config_file)[Rails.env.to_s]
+        Vanity.playground.redis = config if config
+      end
+    end
+    
+    initializer 'vanity.load_playground' do
       Vanity.playground.load!
     end
   end
+  
 end
-
 
 # Reconnect whenever we fork under Passenger.
 if defined?(PhusionPassenger)
