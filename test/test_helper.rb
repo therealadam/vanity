@@ -1,5 +1,6 @@
 $LOAD_PATH.delete_if { |path| path[/gems\/vanity-\d/] }
 $LOAD_PATH.unshift File.expand_path("../lib", File.dirname(__FILE__))
+
 RAILS_ROOT = File.expand_path("..")
 require "test/unit"
 require "mocha"
@@ -26,17 +27,21 @@ class Test::Unit::TestCase
   end
 
   # Call this on teardown. It wipes put the playground and any state held in it
-  # (mostly experiments), resets vanity ID, and clears Redis of all experiments.
+  # (mostly experiments), resets vanity ID, and clears database of all experiments.
   def nuke_playground
     new_playground
-    Vanity.playground.redis.flushdb
+    Vanity.playground.connection.flushdb
   end
-
   # Call this if you need a new playground, e.g. to re-define the same experiment,
   # or reload an experiment (saved by the previous playground).
   def new_playground
-    Vanity.playground = Vanity::Playground.new("::15", :logger=>$logger, :load_path=>"tmp/experiments")
-    #Vanity.playground.mock! unless ENV["REDIS"]
+    case ENV["ADAPTER"]
+    when "redis", nil ; spec = "redis:/"
+    when "mock" ; spec = "mock:/"
+    else raise "No support yet for #{ENV["ADAPTER"]}"
+    end
+    Vanity.playground = Vanity::Playground.new(:logger=>$logger, :load_path=>"tmp/experiments")
+    Vanity.playground.establish_connection spec
   end
 
   # Defines the specified metrics (one or more names).  Returns metric, or array
@@ -66,7 +71,7 @@ class Test::Unit::TestCase
   def teardown
     Vanity.context = nil
     FileUtils.rm_rf "tmp"
-    Vanity.playground.redis.flushdb
+    Vanity.playground.connection.flushdb if Vanity.playground.connected?
   end
 
 end

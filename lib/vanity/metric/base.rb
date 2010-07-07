@@ -4,9 +4,9 @@ module Vanity
   # can also respond to addition methods (+track!+, +bounds+, etc), these are
   # optional.
   #
-  # This class implements a basic metric that tracks data and stores it in
-  # Redis.  You can use this as the basis for your metric, or as reference for
-  # the methods your metric must and can implement.
+  # This class implements a basic metric that tracks data and stores it in the
+  # database.  You can use this as the basis for your metric, or as reference
+  # for the methods your metric must and can implement.
   #
   # @since 1.1.0
   class Metric
@@ -121,8 +121,8 @@ module Vanity
       @playground, @name = playground, name.to_s
       @id = (id || name.to_s.downcase.gsub(/\W+/, '_')).to_sym
       @hooks = []
-      redis.setnx key(:created_at), Time.now.to_i
-      @created_at = Time.at(redis[key(:created_at)].to_i)
+      connection.set_metric_created_at @id, Time.now
+      @created_at = connection.get_metric_created_at(@id)
     end
 
 
@@ -133,7 +133,7 @@ module Vanity
       count ||= 1
       if count > 0
         timestamp = Time.now
-        redis.incrby key(timestamp.to_date, "count"), count
+        connection.metric_track @id, timestamp, count
         @playground.logger.info "vanity: #{@id} with count #{count}"
         call_hooks timestamp, count
       end
@@ -192,18 +192,19 @@ module Vanity
     # Given two arguments, a start date and an end date (inclusive), returns an
     # array of measurements.  All metrics must implement this method.
     def values(from, to)
-      redis.mget((from.to_date..to.to_date).map { |date| key(date, "count") }).map(&:to_i)
+      values = connection.metric_values(@id, from, to)
+      values.map(&:to_i)
     end
 
 
     # -- Storage --
 
     def destroy!
-      redis.del redis.keys(key("*"))
+      connection.destroy_metric @id
     end
 
-    def redis
-      @playground.redis
+    def connection
+      @playground.connection
     end
 
     def key(*args)

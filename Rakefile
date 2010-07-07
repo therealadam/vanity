@@ -3,7 +3,7 @@ require "rake/testtask"
 spec = Gem::Specification.load(File.expand_path("vanity.gemspec", File.dirname(__FILE__)))
 
 desc "Build the Gem"
-task :build=>:test do
+task :build do
   sh "gem build #{spec.name}.gemspec"
 end
 
@@ -14,7 +14,7 @@ task :install=>:build do
 end
 
 desc "Push new release to gemcutter and git tag"
-task :push=>:build do
+task :push=>["test:rubies", "build"] do
   sh "git push"
   puts "Tagging version #{spec.version} .."
   sh "git tag v#{spec.version}"
@@ -24,8 +24,10 @@ task :push=>:build do
 end
 
 
+# Run the test suit.
+
 task :default=>:test
-desc "Run all tests using Redis mock (also default task)"
+desc "Run all tests"
 Rake::TestTask.new do |task|
   task.test_files = FileList['test/*_test.rb']
   if Rake.application.options.trace
@@ -36,12 +38,57 @@ Rake::TestTask.new do |task|
   else
     task.verbose = true
   end
+    task.ruby_opts << "-I."
 end
 
-desc "Run all tests using live redis server"
-task "test:redis" do
-  ENV["REDIS"] = "true"
-  task(:test).invoke
+# These are all the adapters we're going to test with.
+ADAPTERS = %w{redis mock}
+
+desc "Test using different back-ends"
+task "test:adapters", :adapter do |t, args|
+  adapters = args.adapter ? [args.adapter] : ADAPTERS
+  adapters.each do |adapter|
+    puts "** Testing #{adapter} adapter"
+    sh "rake test ADAPTER=#{adapter} #{'--trace' if Rake.application.options.trace}"
+  end
+end
+
+
+# Ruby versions we're testing with.
+RUBIES = %w{1.8.7 1.9.1 1.9.2}
+
+# Use rake test:rubies to run all combination of tests (see test:adapters) using
+# all the versions of Ruby specified in RUBIES. Or to test a specific version of
+# Ruby, rake test:rubies[1.8.7].
+#
+# This task uses RVM to install all the Ruby versions it needs, and creates a
+# vanity gemset in each one that includes Bundler and all the gems specified in
+# Gemfile. If anything goes south you can always wipe these gemsets or uninstall
+# these Rubies and start over.
+desc "Test using multiple versions of Ruby"
+task "test:rubies", :ruby do |t, args|
+  rubies = args.ruby ? [args.ruby] : RUBIES
+  rubies.each do |ruby|
+    puts "** Setup #{ruby}"
+    sh "rvm #{ruby}@vanity rake test:setup"
+    puts
+    puts "** Test using #{ruby}"
+    sh "rvm #{ruby}@vanity -S bundle exec rake test:adapters #{'--trace' if Rake.application.options.trace}"
+  end
+end
+
+task "test:setup" do
+  # Intended to be used from test:rubies, within specific RVM context.
+  begin # Make sure we got Bundler installed.
+    require "bundler"
+  rescue LoadError
+    sh "gem install bundler"
+  end
+  begin # Make sure we got all the dependencies
+    sh "bundle exec ruby -e puts > /dev/null"
+  rescue
+    sh "bundle install"
+  end
 end
 
 task(:clobber) { rm_rf "tmp" }
@@ -62,7 +109,7 @@ task(:jekyll) { sh "jekyll", "doc", "html" }
 desc "Create documentation in docs directory (including API)"
 task :docs=>[:jekyll, :yardoc]
 desc "Remove temporary files and directories"
-task(:clobber) { rm_rf "html" }
+task(:clobber) { rm_rf "html" ; rm_rf ".yardoc" }
 
 desc "Publish documentation to vanity.labnotes.org"
 task :publish=>[:clobber, :docs] do

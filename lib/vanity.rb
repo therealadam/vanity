@@ -2,9 +2,6 @@ require "date"
 require "time"
 require "logger"
 
-$LOAD_PATH << File.join(File.dirname(__FILE__), "../vendor/redis-rb/lib")
-autoload :Redis, "redis"
-
 # All the cool stuff happens in other places.
 # @see Vanity::Helper
 # @see Vanity::Rails
@@ -31,10 +28,12 @@ require "vanity/metric/google_analytics"
 # Experiments.
 require "vanity/experiment/base"
 require "vanity/experiment/ab_test"
+# Database adapters
+require "vanity/adapters/abstract_adapter"
+require "vanity/adapters/redis_adapter"
+require "vanity/adapters/mock_adapter"
 # Playground.
 require "vanity/playground"
 require "vanity/helpers"
-Vanity.autoload :MockRedis, "vanity/mock_redis"
-Vanity.autoload :Commands, "vanity/commands"
 # Integration with various frameworks.
 require "vanity/frameworks/rails" if defined?(Rails)

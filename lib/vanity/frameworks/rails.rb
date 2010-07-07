@@ -212,14 +212,15 @@ if defined?(Rails)
   
 end
 
+
 # Reconnect whenever we fork under Passenger.
 if defined?(PhusionPassenger)
   PhusionPassenger.on_event(:starting_worker_process) do |forked| 
     if forked 
       begin
-        Vanity.playground.reconnect!
+        Vanity.playground.establish_connection
       rescue Exception=>ex
-        Rails.logger.error "Error reconnecting Redis: #{ex.to_s}" 
+        Rails.logger.error "Error reconnecting: #{ex.to_s}" 
       end
     end 
   end 
